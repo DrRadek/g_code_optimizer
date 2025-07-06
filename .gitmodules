@@ -1,0 +1,6 @@
+[submodule "third_party/cuda_voxelizer"]
+	path = third_party/cuda_voxelizer
+	url = https://github.com/DrRadek/cuda_voxelizer
+[submodule "third_party/trimesh2"]
+	path = third_party/trimesh2
+	url = https://github.com/Forceflow/trimesh2
