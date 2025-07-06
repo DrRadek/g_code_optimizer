@@ -1,8 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 project(g_code_optimizer)
 
-#option(TRIMESH_LIB_DIR "Use system-installed Trimesh2" OFF)
-
 set(PlatformToolsetVersion "143")
 if (WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 8)
     set(PlatformArchitecture "Win64")
@@ -37,7 +35,7 @@ set(THIRD_PARTY_LIBS_DIR "${THIRD_PARTY_DIR}/libs")
 set(THIRD_PARTY_INCLUDE_DIR "${THIRD_PARTY_DIR}/include")
 
 # Add include directory for public headers
-# Include Eigen
+# Include Eigen and OpenSTL
 target_include_directories(${PROJECT_NAME} PUBLIC ${THIRD_PARTY_INCLUDE_DIR})
 # Include Trimesh2
 include_directories(${THIRD_PARTY_DIR}/${TRIMESH_INCLUDE_DIR})
