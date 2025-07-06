@@ -4,3 +4,7 @@ build/
 # stl and vox files
 *.stl
 *.vox
+
+# Matrix and text files
+*.txt
+*.mat
