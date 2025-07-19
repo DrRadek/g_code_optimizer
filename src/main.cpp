@@ -334,7 +334,6 @@ int main(int argc, char **argv) {
 	string outputFileNameMatrix = inputs.outputPath + ".mat";
 
 	string outputFileNameVox = inputs.outputPath + ".vox";
-	string outputFileNameVox2 = inputs.outputPath + "2.vox";
 
 	std::cout << "vstupni soubor: " << inputFile << "\n";
 	std::cout << "vystupni soubor: " << outputFileNameStl << "\n";
@@ -368,7 +367,7 @@ int main(int argc, char **argv) {
 	}
 
 	// Voxelize the model
-	auto vtable = CudaVoxelizer::VoxelizeMesh(&themesh, inputs.voxel_size, !inputs.use_gpu, true, inputs.output_voxels ? outputFileNameVox : "");
+	auto vtable = CudaVoxelizer::VoxelizeMesh(&themesh, inputs.voxel_size, !inputs.use_gpu, true, "");
 
 	VoxelAreaInfo voxelAreaInfo = VoxelAreaInfo(inputs.voxel_size);
 	ShrinkBoundingBox(vtable, voxelAreaInfo);
@@ -391,7 +390,7 @@ int main(int argc, char **argv) {
 
 	// Export the final voxel model
 	if (inputs.output_voxels) {
-		auto vtableFinal = CudaVoxelizer::VoxelizeMesh(&themesh, inputs.voxel_size, !inputs.use_gpu, true, outputFileNameVox2);
+		auto vtableFinal = CudaVoxelizer::VoxelizeMesh(&themesh, inputs.voxel_size, !inputs.use_gpu, true, outputFileNameVox);
 	}
 
 	// Save the matrix
