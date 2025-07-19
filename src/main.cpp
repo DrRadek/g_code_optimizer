@@ -21,42 +21,146 @@ using namespace trimesh;
 
 using namespace Eigen;
 
+constexpr double halfPi = M_PIl / 2.0;
+
+struct VoxelAreaInfo {
+	int size;
+	Eigen::Vector3<int> start_index = Eigen::Vector3<int>(0,0,0);
+	Eigen::Vector3<int> end_index;
+
+	VoxelAreaInfo(int size) {
+		this->end_index = Eigen::Vector3<int>(size - 1, size - 1, size - 1);
+		this->size = size;
+	}
+};
+
+struct AxisOrder {
+	int xAxisOrder;
+	int yAxisOrder;
+	int zAxisOrder;
+	bool isReverse;
+};
+
+struct AxisOrderWithRotationInfo : AxisOrder {
+	double pitch;
+	double yaw;
+};
+
+struct Inputs {
+	string inputPath;
+	int voxel_size;
+	bool output_voxels = false;
+	bool use_gpu = true;
+	string outputPath = "";
+};
+
+void ShrinkBoundingBoxInAxis(unsigned int* vtable, VoxelAreaInfo& voxelAreaInfo, int xAxisOrder, int yAxisOrder, int zAxisOrder, bool isReverse = false) {
+	// std::cout << "ShrinkBoundingBoxInAxis, axis order: " << xAxisOrder << yAxisOrder << zAxisOrder << "\n";
+
+	int axisRemap[3];
+	Eigen::Vector3<int> start = voxelAreaInfo.start_index;
+	Eigen::Vector3<int> end = voxelAreaInfo.end_index;
+	Eigen::Vector3<int> direction = Eigen::Vector3<int>(1, 1, 1);
+
+	if (isReverse) {
+		std::swap(start[xAxisOrder], end[xAxisOrder]);
+		direction[xAxisOrder] = -1;
+	}
+
+	for (int x = start[xAxisOrder]; x != end[xAxisOrder] + direction[xAxisOrder]; x += direction[xAxisOrder]) {
+		for (int y = start[yAxisOrder]; y != end[yAxisOrder] + direction[yAxisOrder]; y += direction[yAxisOrder]) {
+			for (int z = start[zAxisOrder]; z != end[zAxisOrder] + direction[zAxisOrder]; z += direction[zAxisOrder]) {
+				axisRemap[xAxisOrder] = x;
+				axisRemap[yAxisOrder] = y;
+				axisRemap[zAxisOrder] = z;
+
+				// Voxels are X-up
+				bool isVoxel = CudaVoxelizer::checkVoxel(axisRemap[0], axisRemap[1], axisRemap[2], voxelAreaInfo.size, vtable);
+
+				if (isVoxel) {
+					// Found a voxel, save new start/end index
+					if (isReverse) {
+						/*std::cout << "New end index is: " << std::min(x, voxelAreaInfo.end_index[xAxisOrder]);
+						std::cout << "\n x is:" << x << "\n";*/
+						voxelAreaInfo.end_index[xAxisOrder] = std::min(x, voxelAreaInfo.end_index[xAxisOrder]);
+					}
+					else {
+						/*std::cout << "New start index is: " << std::max(x, voxelAreaInfo.start_index[xAxisOrder]);
+						std::cout << "\n x is:" << x << "\n";*/
+						voxelAreaInfo.start_index[xAxisOrder] = std::max(x, voxelAreaInfo.start_index[xAxisOrder]);
+					}
+					return;
+				}
+			}
+		}
+	}
+}
+
+// Function to drop empty areas
+void ShrinkBoundingBox(unsigned int* vtable, VoxelAreaInfo& voxelAreaInfo) {
+	// std::cout << "Shrinking bounding box...\n";
+	// std::cout << "Old box size is:\n";
+	// std::cout << voxelAreaInfo.start_index << "\n";
+	// std::cout << voxelAreaInfo.end_index << "\n";
+
+	constexpr AxisOrder shrinkAxisOrder[] = {
+		{0, 1, 2, false}, // Z-up
+		{1, 2, 0, false}, // X-up
+		{2, 0, 1, false}, // Y-up
+		{0, 1, 2, true},  // Z-down
+		{1, 2, 0, true},  // X-down
+		{2, 0, 1, true}   // Y-down
+	};
+
+	for (const auto& axis : shrinkAxisOrder) {
+		ShrinkBoundingBoxInAxis(vtable, voxelAreaInfo, axis.xAxisOrder, axis.yAxisOrder, axis.zAxisOrder, axis.isReverse);
+	}
+
+	// std::cout << "New box size is:\n";
+	// std::cout << voxelAreaInfo.start_index << "\n";
+	// std::cout << voxelAreaInfo.end_index << "\n";
+}
+
 // depends on zAxisOrder
 // zAxisOrder = 2 => z-up
 // zAxisOrder = 1 => y-up
 // zAxisOrder = 0 => x-up
-int CalculateAreaAngled(unsigned int* vtable, int size, int xAxisOrder, int yAxisOrder, int zAxisOrder, bool reverse = false) {
-
+int CalculateAreaAngled(unsigned int* vtable, VoxelAreaInfo &voxelAreaInfo, int xAxisOrder, int yAxisOrder, int zAxisOrder, bool isReverse = false) {
 	int axisRemap[3];
 	bool reverseX = false;
 	bool reverseY = false;
-	bool reverseZ = reverse;
+	bool reverseZ = isReverse;
 
 	int sum = 0;
-
 	int sum2 = 0;
-	int startIndex = 0;
-	int endIndex = size;
 	int i = 0;
 	int maxprintI = 0;
-	for (int x = (reverseX ? size - 1 : startIndex); x != (reverseX ? -1 : endIndex); x += (reverseX ? -1 : 1)) {
-		
-		for (int y = (reverseY ? size - 1 : startIndex); y != (reverseY ? -1 : endIndex); y += (reverseY ? -1 : 1)) {
+
+	Eigen::Vector3<int> start = voxelAreaInfo.start_index;
+	Eigen::Vector3<int> end = voxelAreaInfo.end_index;
+	Eigen::Vector3<int> direction = Eigen::Vector3<int>(1,1,1);
+
+	if (isReverse) {
+		std::swap(start[zAxisOrder], end[zAxisOrder]);
+		direction[zAxisOrder] = -1;
+	}
+
+	for (int x = start[xAxisOrder]; x != end[xAxisOrder] + direction[xAxisOrder]; x += direction[xAxisOrder]) {
+		for (int y = start[yAxisOrder]; y != end[yAxisOrder] + direction[yAxisOrder]; y += direction[yAxisOrder]) {
+
 			int v = 0;
 			int vxy = 0;
-
-			
-			for (int z = (reverseZ ? size - 1 : startIndex); z != (reverseZ ? -1 : endIndex); z += (reverseZ ? -1 : 1)) {
+			for (int z = start[zAxisOrder]; z != end[zAxisOrder] + direction[zAxisOrder]; z += direction[zAxisOrder]) {
 				axisRemap[xAxisOrder] = x;
 				axisRemap[yAxisOrder] = y;
 				axisRemap[zAxisOrder] = z;
 
 				if (i < maxprintI) {
 					std::cout << axisRemap[0] << " " << axisRemap[1] << " " << axisRemap[2] << "\n";
-					
 				}
 				
-				bool isVoxel = CudaVoxelizer::checkVoxel(axisRemap[0], axisRemap[1], axisRemap[2], size, vtable);
+				bool isVoxel = CudaVoxelizer::checkVoxel(axisRemap[0], axisRemap[1], axisRemap[2], voxelAreaInfo.size, vtable);
+
 				if (isVoxel) {
 					vxy += v;
 					v = 0;
@@ -74,88 +178,166 @@ int CalculateAreaAngled(unsigned int* vtable, int size, int xAxisOrder, int yAxi
 			i++;
 		}
 	}
-	std::cout << "sum of model is: " << sum << "\n";
-	std::cout << "max sum is: " << sum2 << "\n";
+	std::cout << "suma podpor: " << sum << "\n";
+	std::cout << "suma modelu: " << sum2 << "\n";
 
 	return sum;
 }
 
-
-void StoreBetterResult(double&minAreaYaw, double&minAreaPitch, int &minArea, double resultYaw, double resultPitch, int result) {
+void StoreBetterResult(double&minAreaPitch, double& minAreaYaw, int &minArea, double resultPitch, double resultYaw, int result) {
 	if (result < minArea) {
 		minAreaYaw = resultYaw;
 		minAreaPitch = resultPitch;
 		minArea = result;
 
-		std::cout << "result is better\n";
-		
+		std::cout << "vysledek je lepsi\n";
+		std::cout << "Pitch a yaw:" << minAreaPitch << " " << minAreaYaw << "\n";
 	}
 	std::cout << minArea << "\n";
+	std::cout << "\n";
 }
 
 // Finds the best rotation in 90 degrees and returns yaw + pitch of the rotation
-std::pair<float, float> OptimizeRotation90Degrees(unsigned int* vtable, int size) {
+std::pair<float, float> OptimizeRotation90Degrees(unsigned int* vtable, VoxelAreaInfo &voxelAreaInfo) {
+	std::cout << "Optimalizace rotace...\n";
 
 	int minArea = std::numeric_limits<int>::max();
 	double minAreayaw = 0;
 	double minAreapitch = 0;
 	int result;
 
-	// z-up
-	result = CalculateAreaAngled(vtable, size, 0, 1, 2);
-	StoreBetterResult(minAreayaw, minAreapitch, minArea, 0, 0, result);
-	// z-up flipped
-	result = CalculateAreaAngled(vtable, size, 0, 1, 2, true);
-	StoreBetterResult(minAreayaw, minAreapitch, minArea, M_PIl, 0, result);
+	constexpr AxisOrderWithRotationInfo axisOrder[] = {
+		// xAxis, yAxis, zAxis, isReverse,     pitch,     yaw
+		{   0,     1,     2,     false,        0.0,       0.0       }, // Z-up
+		{   0,     1,     2,     true,         M_PIl,     0.0       }, // Z-down
+		{   1,     2,     0,     false,        0.0,      -halfPi    }, // X-up
+		{   1,     2,     0,     true,         0.0,       halfPi    }, // X-down
+		{   2,     0,     1,     false,        halfPi,    0.0       }, // Y-up
+		{   2,     0,     1,     true,        -halfPi,    0.0       }  // Y-down
+	};
 
-	// x-up
-	result = CalculateAreaAngled(vtable, size, 1, 2, 0);
-	StoreBetterResult(minAreayaw, minAreapitch, minArea, M_PIl / 2.0, 0, result);
-	// x-up flipped
-	result = CalculateAreaAngled(vtable, size, 1, 2, 0, true);
-	StoreBetterResult(minAreayaw, minAreapitch, minArea, M_PIl / 2.0, M_PIl, result);
+	for (const auto& axis : axisOrder) {
+		double result = CalculateAreaAngled(
+			vtable, voxelAreaInfo,
+			axis.xAxisOrder, axis.yAxisOrder, axis.zAxisOrder,
+			axis.isReverse);
 
-	// y-up
-	result = CalculateAreaAngled(vtable, size, 2, 0, 1);
-	StoreBetterResult(minAreayaw, minAreapitch, minArea, 0, M_PIl / 2.0, result);
-	// y-up flipped
-	result = CalculateAreaAngled(vtable, size, 2, 0, 1, true);
-	StoreBetterResult(minAreayaw, minAreapitch, minArea, M_PIl, M_PIl / 2.0, result);
+		StoreBetterResult(minAreapitch, minAreayaw, minArea,
+			axis.pitch, axis.yaw, result);
+	}
 
-	std::cout << "Min yaw and pitch:" << minAreayaw << " " << minAreapitch << "\n";
+	std::cout << "Minimalni pitch a yaw:" << minAreapitch << " " << minAreayaw << "\n";
 
-	return { minAreayaw,minAreapitch };
+	return { minAreapitch,minAreayaw };
+}
+
+bool HandleBoolInput(string input) {
+	bool result;
+	for (auto& c : input)
+	{
+		c = tolower(c);
+	}
+
+	if (input == "true") {
+		result = true;
+	}
+	else if (input == "false") {
+		result = false;
+	}
+	else {
+		std::istringstream ss(input);
+		if (!(ss >> result)) {
+			throw invalid_argument("Neni typu bool (validni hodnoty: [true, false, 0, 1]).");
+		}
+	}
+
+	return result;
+}
+
+void HandleInputs(int argc, char** argv, Inputs &inputs) {
+	if (argc > 1) {
+		// Handle file name input
+		std::cout << "Vstupni soubor je: " << argv[1] << "\n";
+		inputs.inputPath = argv[1];
+
+		if (inputs.inputPath.ends_with(".stl")) {
+			inputs.inputPath.replace(inputs.inputPath.length() - 4, 4, "");
+		}
+	}
+	else {
+		throw invalid_argument("Vstupni soubor nespecifikovan.");
+	}
+
+	if (argc > 2) {
+		// Handle voxel size input
+		std::istringstream ss(argv[2]);
+		if (!(ss >> inputs.voxel_size) || inputs.voxel_size <= 0) {
+			throw invalid_argument("Rozliseni site nespecifikovano musi byt cele kladne cislo.");
+		}
+	}
+	else {
+		throw invalid_argument("Rozliseni site nespecifikovano.");
+	}
+
+	if (argc > 3) {
+		// Handle whether voxelized file should be outputted
+		try {
+			inputs.output_voxels = HandleBoolInput(argv[3]);
+		}
+		catch (invalid_argument& e) {
+			string err = "Chyba pri cteni argumentu zda ulozit voxely: ";
+			err += e.what();
+			throw invalid_argument(err);
+		}
+	}
+
+	if (argc > 4) {
+		// Handle whether gpu should be used
+		try {
+			inputs.use_gpu = HandleBoolInput(argv[4]);
+		}
+		catch (invalid_argument& e) {
+			string err = "Chyba pri cteni argumentu zda pouzit gpu: ";
+			err += e.what();
+			throw invalid_argument(err);
+		}
+	}
+
+	if (argc > 5) {
+		inputs.outputPath = argv[5];
+	}
+
+	if (inputs.outputPath == "") {
+		inputs.outputPath = inputs.inputPath + "-out";
+	}
 }
 
 int main(int argc, char **argv) {
-	// Read input
-	string inputFileName = "";
-	if (argc < 2) {
-		std::cout << "Vstupni soubor nespecifikovan.\n";
-	}
-	else {
-		std::cout << "Vstupni soubor je: " << argv[1] << "\n";
-		inputFileName = argv[1];
-	}
+	Inputs inputs;
 
-	if (inputFileName.ends_with(".stl")) {
-		inputFileName.replace(inputFileName.length() - 4, 4, "");
+	try
+	{
+		HandleInputs(argc, argv, inputs);
+	}
+	catch (invalid_argument& e)
+	{
+		std::cerr << "Chyba pri cteni vstupu: " << e.what() << "\n";
+		return -1;
 	}
 
-	string fileName = inputFileName + ".stl";
-	string outputFileNameStl = inputFileName + "-out.stl";
-	string outputFileNameMatrix = inputFileName + "-out.mat";
+	string inputFile = inputs.inputPath + ".stl";
+	string outputFileNameStl = inputs.outputPath + ".stl";
+	string outputFileNameMatrix = inputs.outputPath + ".mat";
 
-	string outputFileNameVox = inputFileName + "-out.vox";
-	string outputFileNameVox2 = inputFileName + "-outfirst.vox";
+	string outputFileNameVox = inputs.outputPath + ".vox";
+	string outputFileNameVox2 = inputs.outputPath + "2.vox";
 
-
-	std::cout << "vstupni soubor: " << fileName << "\n";
+	std::cout << "vstupni soubor: " << inputFile << "\n";
 	std::cout << "vystupni soubor: " << outputFileNameStl << "\n";
 
 	// Read stl
 	ifstream readStream;
-	readStream.open(fileName, std::ios::binary);
+	readStream.open(inputFile, std::ios::binary);
 	if (!readStream.is_open()) {
 		std::cout << "Vstupni soubor se nepovedlo otevrit.";
 		return -1;
@@ -182,16 +364,17 @@ int main(int argc, char **argv) {
 	}
 
 	// Voxelize the model
-	int voxel_size = 50;
-	auto vtable = CudaVoxelizer::VoxelizeMesh(&themesh, voxel_size, false, true, outputFileNameVox2);
+	auto vtable = CudaVoxelizer::VoxelizeMesh(&themesh, inputs.voxel_size, !inputs.use_gpu, true, inputs.output_voxels ? outputFileNameVox : "");
 
+	VoxelAreaInfo voxelAreaInfo = VoxelAreaInfo(inputs.voxel_size);
+	ShrinkBoundingBox(vtable, voxelAreaInfo);
 	// Optimize the rotation
-	auto [yaw,pitch] = OptimizeRotation90Degrees(vtable, voxel_size);
+	auto [pitch,yaw] = OptimizeRotation90Degrees(vtable, voxelAreaInfo);
 
 	// Rotate the model
 	Eigen::Quaternionf q =
-		Eigen::AngleAxisf(pitch, Eigen::Vector3f::UnitX()) *
-		Eigen::AngleAxisf(yaw, Eigen::Vector3f::UnitY());
+		Eigen::AngleAxisf(yaw, Eigen::Vector3f::UnitY()) *
+		Eigen::AngleAxisf(pitch, Eigen::Vector3f::UnitX());
 	q.normalize();
 
 	for (int i = 0; i < vertices.size(); i++) {
@@ -199,8 +382,13 @@ int main(int argc, char **argv) {
 		themesh.vertices[i] = (Vec3)vertices[i];
 	}
 
+	themesh.bbox.clear();
+	themesh.clear_bbox();
+
 	// Export the final voxel model
-	auto vtableFinal = CudaVoxelizer::VoxelizeMesh(&themesh, voxel_size, false, true, outputFileNameVox);
+	if (inputs.output_voxels) {
+		auto vtableFinal = CudaVoxelizer::VoxelizeMesh(&themesh, inputs.voxel_size, !inputs.use_gpu, true, outputFileNameVox2);
+	}
 
 	// Save the matrix
 	auto matrix = q.toRotationMatrix();
