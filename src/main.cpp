@@ -305,6 +305,10 @@ void HandleInputs(int argc, char** argv, Inputs &inputs) {
 
 	if (argc > 5) {
 		inputs.outputPath = argv[5];
+
+		if (inputs.outputPath.ends_with(".stl")) {
+			inputs.outputPath.replace(inputs.outputPath.length() - 4, 4, "");
+		}
 	}
 
 	if (inputs.outputPath == "") {
