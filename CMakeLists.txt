@@ -1,7 +1,6 @@
 cmake_minimum_required(VERSION 3.15)
 project(g_code_optimizer)
 
-set(PlatformToolsetVersion "143")
 if (WIN32 AND CMAKE_SIZEOF_VOID_P EQUAL 8)
     set(PlatformArchitecture "Win64")
 elseif(WIN32)
@@ -9,6 +8,8 @@ elseif(WIN32)
 endif()
 
 if (WIN32)
+    set(PlatformToolsetVersion "143")
+
     # Path to trimesh2 build
     set(TRIMESH_LIB_DIR "trimesh2/lib.${PlatformArchitecture}.vs${PlatformToolsetVersion}")
     set(TRIMESH_INCLUDE_DIR "trimesh2/include")
