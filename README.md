@@ -21,6 +21,11 @@ Validní hodnoty pro typ bool jsou: [0, 1, false, true].
 
 Nespecifikovaná výchozí hodnota znamená, že parametr je povinný.
 
+Volání má následující tvar:
+`g_code_optimizer.exe [vstupní soubor] [rozlišení sítě] (uložit výsledný voxelový model) (použít gpu) (výstupní soubor)`
+
+`[]` jsou povinné parametry, `()` jsou nepovinné parametry.
+
 |Typ|Výchozí hodnota|Popis|
 |:-:|:-:|:-:|
 |string||Cesta ke vstupnímu STL souboru (například `C:/modely/hrnicek.stl`)|
@@ -57,7 +62,8 @@ Výstupem jsou soubory:
 Momentálně je podporovaný pouze Windows.
 
 ### Závislosti
-Nejprve je potřeba zkompilovat cuda_voxelizer a trimesh2:
+Nejprve je potřeba naklonovat a zkompilovat cuda_voxelizer a trimesh2:
+1. `git submodule update --init`
 1. jděte do příslušné složky (thirdparty/\<závislost>)
 1. postupujte podle README dané závislosti
 
