@@ -12,7 +12,7 @@ Cesta k výstupním souborů je relativně k výstupnímu STL souboru.
 
 Výstupem je:
 - .stl - optimalizovaný STL soubor
-- .mat - matice rotace
+- .quat - kvaternion rotace
 - .vox - voxelizovaná podoba optimalizovaného STL souboru (pokud je specifikován parametr)
 
 ## Vstupy
@@ -48,14 +48,14 @@ Volání má následující tvar:
 
 Výstupem jsou soubory:
 - `modely/hrnicek-out.stl`
-- `modely/hrnicek-out.mat`
+- `modely/hrnicek-out.quat`
 
 ### Příklad 2
 `g_code_optimizer.exe modely/hrnicek.stl 100 1 1 optimalizovane_modely/hrnicek.stl`
 
 Výstupem jsou soubory:
 - `optimalizovane_modely/hrnicek.stl`
-- `optimalizovane_modely/hrnicek.mat`
+- `optimalizovane_modely/hrnicek.quat`
 - `optimalizovane_modely/hrnicek.vox`
 
 ## Cmake build
