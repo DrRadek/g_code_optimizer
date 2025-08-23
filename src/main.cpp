@@ -331,7 +331,7 @@ int main(int argc, char **argv) {
 
 	string inputFile = inputs.inputPath + ".stl";
 	string outputFileNameStl = inputs.outputPath + ".stl";
-	string outputFileNameMatrix = inputs.outputPath + ".mat";
+	string outputFileNameQuat = inputs.outputPath + ".quat";
 
 	string outputFileNameVox = inputs.outputPath + ".vox";
 
@@ -393,14 +393,13 @@ int main(int argc, char **argv) {
 		auto vtableFinal = CudaVoxelizer::VoxelizeMesh(&themesh, inputs.voxel_size, !inputs.use_gpu, true, outputFileNameVox);
 	}
 
-	// Save the matrix
-	auto matrix = q.toRotationMatrix();
-	std::cout << matrix << "\n";
-	ofstream matrixWriteStream;
-	matrixWriteStream.open(outputFileNameMatrix);
-	matrixWriteStream << matrix;
-	matrixWriteStream.close();
-	
+	// Save the quat
+	std::cout << q << "\n";
+	ofstream quatWriteStream;
+	quatWriteStream.open(outputFileNameQuat);
+	quatWriteStream << q;
+	quatWriteStream.close();
+
 	// Save the rotated STL
 	ofstream writeStream;
 	writeStream.open(outputFileNameStl, std::ios::binary);
